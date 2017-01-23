@@ -3,36 +3,38 @@ const renderContainer = document.querySelector('.content');
 const app = {};
 
 let timeoutHandler = null;
-let paramObj = '';
+
+app.paramObj = '';
 
 
-app.route = (function () {
+app.route = function () {
 	const params = location.pathname.split('/');
 	return params;
 
-}());
+};
 
 app.init = function () {
-	let root = this.route.length;
+	let root = this.route();
 
-	if (root >= 3) {
+
+	if (root.length >= 3) {
 		//deep link
-		paramObj = {
-			state: this.route[this.route.length - 2],
-			id: this.route[this.route.length - 1]
+		this.paramObj = {
+			state: root[root.length - 2],
+			id: root[root.length - 1]
 		}
 
 	} else {
-		paramObj = {
-			state: this.route[this.route.length - 1]
+		this.paramObj = {
+			state: root[root.length - 1]
 		}
 	}
 
 
-	if (paramObj.state === '') {
+	if (app.paramObj.state === '') {
 		this.setView('');
 	} else {
-		if (paramObj.state === 'about') {
+		if (app.paramObj.state === 'about') {
 			this.setActiveLink(document.querySelector('.nav a[data-href="about"]'));
 			this.setView('about');
 		} else {
@@ -41,7 +43,7 @@ app.init = function () {
 			});
 
 			//deep linking TODO
-			this.setView(paramObj.state, paramObj.id);
+			this.setView(app.paramObj.state, app.paramObj.id);
 
 		}
 	}
@@ -392,6 +394,10 @@ app.setActiveLink = target => {
 	[...document.querySelectorAll('.nav a')].forEach(i => {
 		i.classList.remove('active');
 	});
+	if (target.dataset.href === '') {
+		document.querySelector('.nav a[data-href=""]').classList.add('active');
+		return;
+	}
 	target.classList.add('active');
 };
 
@@ -436,7 +442,7 @@ app.pushHistory = function (state, page, url) {
 	console.log(state, page, url);
 	history.pushState(state, '', url);
 
-	paramObj = state;
+	this.paramObj = state;
 
 	//do navigation and set content
 	this.setView(history.state.state);
@@ -507,22 +513,23 @@ app.event = {
 		})
 	},
 	about(cb, eventLink) {
-		console.log('hit about event');
 		cb();
 		eventLink();
 	},
 	track(cb, eventLink, ex) {
 		let id = '';
 		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
-
-		console.log('hit track event');
+		app.currentState.id = id;
 
 		let url = `https://api.spotify.com/v1/tracks/${id}`;
 		app.ajax(url, function(e) {
 			if(e.error) {
 				app.render.checkAjaxError(e.error.message);
+				app.currentState.errorMsg = e.error.message;
 				return false;
 			};
+
+			app.currentState.track = e;
 			cb(e, eventLink);
 		})
 
@@ -531,23 +538,28 @@ app.event = {
 		let id = '';
 		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
 
-		console.log('hit artist event');
-
 		let artistUrl = `https://api.spotify.com/v1/artists/${id}`;
 		let albumsUrl = `https://api.spotify.com/v1/artists/${id}/albums`;
 		let data = '';
 
+
+		app.currentState.id = id;
 		app.ajax(artistUrl, function(artist) {
 
 			//errorCheck
 			if(artist.error) {
 				app.render.checkAjaxError(artist.error.message);
+				app.currentState.errorMsg = artist.error.message;
 				return false;
 			};
+
+			app.currentState.artist = artist;
 
 			app.ajax(albumsUrl, function(albums) {
 				//fuck you callback hell
 				data = albums.items;
+				app.currentState.albums = albums.items;
+
 				cb(artist, albums, eventLink);
 			})
 
@@ -570,6 +582,8 @@ app.event = {
 				let value = e.target.value.trim();
 				//clear items
 				markupModel = '';
+
+				app.currentState.term = value;
 
 				//filtering
 				if (value !== '') {
@@ -616,7 +630,7 @@ app.event = {
 		let id = '';
 		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
 
-		console.log('hit top-tracks event');
+		app.currentState.id = id;
 
 		let artistUrl = `https://api.spotify.com/v1/artists/${id}`;
 		let trackUrl = `https://api.spotify.com/v1/artists/${id}/top-tracks?country=TW`;
@@ -625,12 +639,16 @@ app.event = {
 			//errorCheck
 			if(artist.error) {
 				app.render.checkAjaxError(artist.error.message);
+				app.currentState.errorMsg = artist.error.message;
 				return false;
 			};
+
+			app.currentState.artist = artist;
 
 			app.ajax(trackUrl, function(tracks) {
 				//fuck you callback hell
 
+				app.currentState.tracks = tracks;
 				cb(tracks, artist, eventLink);
 			});
 
@@ -721,6 +739,23 @@ app.state = {
 		id: '',
 		track: '',
 		errorMsg: ''
+	},
+	artist: {
+		id: '',
+		artist: '',
+		albums: '',
+		term: '',
+		errorMsg: '',
+	},
+	album: {
+		id: '',
+		album: ''
+	},
+	'top-tracks': {
+		id: '',
+		tracks: '',
+		artist: '',
+		errorMsg: ''
 	}
 };
 
@@ -754,6 +789,9 @@ function deepLinkBinder(e) {
 		e.preventDefault();
 		let id = e.target.dataset.href;
 		// if innerstate is same as prev return
+		if (id === history.state.state) return false;
+
+
 		app.setActiveLink(e.target);
 
 		app.pushHistory({
@@ -777,3 +815,4 @@ window.onpopstate = function (e) {
 		});
 	}
 }
+
