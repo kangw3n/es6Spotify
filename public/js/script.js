@@ -6,53 +6,112 @@ let timeoutHandler = null;
 
 app.paramObj = '';
 
+app.routeConfig = [
+	{path: '', component: 'search', routeIndex: true},
+	{path: '/about', component: 'about'},
+	{path: '/track/:id', component: 'track'},
+	{path: '/album/:id', component: 'album'},
+	{path: '/artist/:id', component: 'artist'},
+	{path: '/top-tracks/:id', component: 'top-tracks'}
+];
 
-app.route = function () {
-	const params = location.pathname.split('/');
-	return params;
+app.route = () => location.pathname.split('/');
 
+app.routeFn = {
+	routeAvailableCheck(val) {
+		let checking = false;
+		app.routeConfig.forEach(e => {
+			if (e.component === val) {
+				checking = true;
+			}
+		});
+		return checking;
+	},
+	isDeepLink() {
+		return app.routeConfig.filter(e => {
+			return e.path.indexOf('/:') > 0;
+		});
+	},
+	filterProp(val, prop) {
+		return app.routeConfig.filter(e => {
+			return e[prop].indexOf(val) > 0;
+		});
+	},
+	findIndexRoute() {
+		let obj = null;
+		app.routeConfig.forEach(e => {
+			if (e.hasOwnProperty('routeIndex') && e.routeIndex) {
+				obj = e;
+			}
+		});
+		return obj;
+	},
+	checkDeepLink(val) { //check if deep link
+		let deepLinkCheck = app.routeFn.isDeepLink();
+		let status = false;
+
+		deepLinkCheck.forEach(e => {
+			if (e.component === val) status = true;
+		});
+		return status;
+	},
+	checkHome(val) {
+		return val === '' ? app.routeFn.findIndexRoute().component : val;
+	},
+	getRouteUrl(val) {
+		let value = null;
+
+		app.routeConfig.forEach(e => {
+			if (val === e.component) {
+				value = e.path.split('/')[1];
+			}
+		});
+
+		return value;
+	}
 };
 
-app.init = function () {
+app.init = function() {
 	let root = this.route();
-
+	console.log('new request made!');
 
 	if (root.length >= 3) {
 		//deep link
 		this.paramObj = {
-			state: root[root.length - 2],
-			id: root[root.length - 1]
+			state: root[1],
+			id: root.slice(2)
 		}
 
 	} else {
 		this.paramObj = {
-			state: root[root.length - 1]
+			state: app.routeFn.checkHome(root[1])
 		}
 	}
 
+	//check exists or return false
+	if (!app.routeFn.routeAvailableCheck(app.paramObj.state)) {
+		this.setView('404');
+		return;
+	}
 
-	if (app.paramObj.state === '') {
-		this.setView('');
+	if (!app.routeFn.checkDeepLink(app.paramObj.state)) { //exitst??
+		this.event.setActiveLink(document.querySelector('.nav a[data-href="' + app.paramObj.state + '"]'));
+		this.setView(app.paramObj.state);
 	} else {
-		if (app.paramObj.state === 'about') {
-			this.setActiveLink(document.querySelector('.nav a[data-href="about"]'));
-			this.setView('about');
-		} else {
-			[...document.querySelectorAll('.nav a')].forEach(i => {
-				i.classList.remove('active');
-			});
+		[...document.querySelectorAll('.nav a')].forEach(i => {
+			i.classList.remove('active');
+		});
 
-			//deep linking TODO
-			this.setView(app.paramObj.state, app.paramObj.id);
+		//deep linking TODO
+		this.setView(app.paramObj.state, app.paramObj.id);
 
-		}
 	}
 };
 
 app.currentState = {};
 
 app.pipe = {
-	msMinute: function(millseconds) {
+	msMinute: function (millseconds) {
 		var seconds = Math.floor(millseconds / 1000);
 		var days = Math.floor(seconds / 86400);
 		var hours = Math.floor((seconds % 86400) / 3600);
@@ -60,13 +119,19 @@ app.pipe = {
 		var timeString = '';
 
 
-		if(days > 0) timeString += (days > 1) ? (days + " days ") : (days + " day ");
-		if(hours > 0) timeString += (hours > 1) ? (hours + " hours ") : (hours + " hour ");
-		if(minutes >= 0) timeString += (minutes > 1) ? (minutes + " minutes ") : (minutes + " minute ");
+		if (days > 0) timeString += (days > 1) ? (days + " days ") : (days + " day ");
+		if (hours > 0) timeString += (hours > 1) ? (hours + " hours ") : (hours + " hour ");
+		if (minutes >= 0) timeString += (minutes > 1) ? (minutes + " minutes ") : (minutes + " minute ");
 		return timeString;
 
+	},
+	capitalizeFirstLetter(string) {
+		return string.charAt(0).toUpperCase() + string.slice(1);
+	},
+	setTitle(value = '', optional = '') {
+		return document.querySelector('title').text = 'ES6Spotify | ' + app.pipe.capitalizeFirstLetter(value) + ' ' + optional;
 	}
-}
+};
 
 app.view = {
 	search: function () {
@@ -104,7 +169,7 @@ app.view = {
 
 		renderContainer.innerHTML = markup;
 	},
-	track: function(data, eventLink) {
+	track: function (data, eventLink) {
 
 		const artistsMarkup = function (o) {
 			if (o.artists) {
@@ -157,18 +222,18 @@ app.view = {
 		renderContainer.innerHTML = markup;
 		eventLink();
 	},
-	artist: function(artist, album, eventLink) {
-		const artistAlbum = function(j) {
-			if(j.images.length) {
+	artist: function (artist, album, eventLink) {
+		const artistAlbum = function (j) {
+			if (j.images.length) {
 				return `<span><img src="${j.images[0].url}" class="artist-thumb img-circle" alt=""></span>`;
 			}
 			return '';
 		};
 
-		const artistGernes = function(l) {
+		const artistGernes = function (l) {
 			if (l.genres.length) {
 				let markup = '<p>Genres: ';
-				l.genres.forEach(function(gerne) {
+				l.genres.forEach(function (gerne) {
 					markup += `<span class="spacer">${gerne}</span>`
 				});
 
@@ -182,7 +247,7 @@ app.view = {
 		const albumMarkup = function (o) {
 			if (o) {
 				let markup = '';
-				o.forEach(function(album) {
+				o.forEach(function (album) {
 					markup += `<div class="col-md-3 well">
 						<div class="album">
 							<img src="${album.images[0].url}" class="album-thumb img-thumbnail" alt="">
@@ -190,7 +255,6 @@ app.view = {
 							<a href="/album/${album.id}" class="deep-link btn btn-default btn-block">Album Details</a>
 						</div>
 					</div>`;
-
 
 
 				});
@@ -239,7 +303,7 @@ app.view = {
 		renderContainer.innerHTML = markup;
 		eventLink();
 	},
-	album: function(album, eventLink) {
+	album: function (album, eventLink) {
 
 		const artistsMarkup = function (o) {
 			if (o.artists) {
@@ -254,16 +318,16 @@ app.view = {
 			return '';
 		};
 
-		const forArtist = function(artists) {
+		const forArtist = function (artists) {
 			let markup = '';
 			artists.forEach(artist => {
-				markup += `<a href="/artist/${artist.id}"><span class="spacer">${artist.name}</span></a>`;
+				markup += `<span class="spacer"><a href="/artist/${artist.id}" class="deep-link">${artist.name}</a></span>`;
 			});
 
 			return markup;
 		};
 
-		const tracksMarkup = function(i) {
+		const tracksMarkup = function (i) {
 			let markup = '';
 			i.forEach(track => {
 				markup += `<div class="well">
@@ -322,15 +386,15 @@ app.view = {
 		renderContainer.innerHTML = markup;
 		eventLink();
 	},
-	'top-tracks': function(track, artist, eventLink) {
-		const artistAlbum = function(j) {
-			if(j.images.length) {
+	'top-tracks': function (track, artist, eventLink) {
+		const artistAlbum = function (j) {
+			if (j.images.length) {
 				return `<div><img src="${j.images[0].url}" class="album-thumb" alt=""></div>`;
 			}
 			return '';
 		};
 
-		const tracksMarkup = function(i) {
+		const tracksMarkup = function (i) {
 			let markup = '';
 			i.forEach(track => {
 				markup += `<div class="well">
@@ -387,59 +451,38 @@ app.view = {
 
 		renderContainer.innerHTML = markup;
 		eventLink();
-	}
-}
-
-app.setActiveLink = target => {
-	[...document.querySelectorAll('.nav a')].forEach(i => {
-		i.classList.remove('active');
-	});
-	if (target.dataset.href === '') {
-		document.querySelector('.nav a[data-href=""]').classList.add('active');
-		return;
-	}
-	target.classList.add('active');
+	},
 };
 
 app.setView = function (state, existence) {
-	console.log('currentState: ' + state + ', id: ' + existence);
+	console.log('currentView: ' + state + ', id: ' + existence);
+
 	// clear renderContainer
 	renderContainer.innerHTML = '';
 
-	//set view
-	if (state === '') {
-
-		// setFreshState to currentView
-		this.currentState = this.state['search'];
-
-		//setViewMarkup
-		this.view.search();
-
-		//clearEvent and setEvent
-		this.event['search']();
-
-		this.setTitle('ES6Spotify', 'Vanila JS');
-
-	} else {
-
+	//try catch block to pass invalid view
+	try {
 		//setFrestState to currentView
 		this.currentState = this.state[state];
 
 		//clearEvent and SetEvent - do ajax and callback as rerender - LIFECYCLE EMMITION?
-		this.event[state](this.view[state],	this.event.routerLink, existence);
+		this.event[state](this.view[state], this.event.routerLink, existence);
 
 		//setTitle
-		this.setTitle(state);
+		this.pipe.setTitle(state);
+
+	} catch (err) {
+		console.warn(err);
+		this.currentState = parseInt(state);
+		this.pipe.setTitle(state);
+		this.render.checkAjaxError('404 Route Not Found!');
 
 	}
-};
 
-app.setTitle = function (state, value = '') {
-	document.querySelector('title').text = state + value;
 };
 
 app.pushHistory = function (state, page, url) {
-	console.log(state, page, url);
+	// console.log(state, page, url);
 	history.pushState(state, '', url);
 
 	this.paramObj = state;
@@ -447,87 +490,131 @@ app.pushHistory = function (state, page, url) {
 	//do navigation and set content
 	this.setView(history.state.state);
 
-}
+};
 
 app.ajax = ((url, cb) => {
 	fetch(url)
 		.then(res => res.json())
 		.then(j => cb(j))
-		.catch((err) => {
-
-		})
-	;
-})
+});
 
 //app controller here
 app.event = {
+	setActiveLink(target){
+		[...document.querySelectorAll('.nav a')].forEach(i => {
+			i.classList.remove('active');
+		});
+		if (target.dataset.href === '') {
+			document.querySelector('.nav a[data-href=""]').classList.add('active');
+			return;
+		}
+		target.classList.add('active');
+	},
 	routerLink() {
-		[...document.querySelectorAll('.deep-link')].forEach(e=> {
+		[...document.querySelectorAll('.deep-link')].forEach(e => {
 			e.addEventListener('click', deepLinkBinder);
 		})
 
 	},
 	reEnableRouterLink() {
-		[...document.querySelectorAll('.deep-link')].forEach(e=> {
+		[...document.querySelectorAll('.deep-link')].forEach(e => {
 			e.removeEventListener('click', deepLinkBinder);
 		});
 
 		this.routerLink();
 	},
-	search: function () {
+	search(cb, eventLink) {
 		//offevent
+		cb();
 
-		function ajaxCalling(r) {
-			//returned promised!!
-			app.currentState.songs = r[app.currentState.queryType + 's'].items;
+		const ajaxCalling = r => {
+
 
 			//emit event
 			let renderMarkup = '';
+			const render = document.getElementById('render');
 
-			app.currentState.songs.forEach(i => {
-				let currentMark = app.render.search(i);
-				renderMarkup += currentMark;
-			});
+			try {
+				//returned promised!!
+				app.currentState.songs = r[app.currentState.queryType + 's'].items;
 
-			document.getElementById('render').innerHTML = renderMarkup;
+				if (!app.currentState.songs.length) {
+					render.innerHTML = `<h3>No Result Found </h3>`;
+					return;
+				}
 
-			app.event.routerLink();
+				app.currentState.songs.forEach(i => {
+					let currentMark = app.render.search(i);
+					renderMarkup += currentMark;
+				});
+
+				render.innerHTML = renderMarkup;
+
+				app.event.routerLink();
+
+			} catch (err) {
+				console.log(err);
+				render.innerHTML = ''
+			}
 
 
 		}
 
 		//event
-		document.querySelector('#searchStr').addEventListener('keyup', (e) => {
+		document.querySelector('#searchStr').addEventListener('keyup', e => {
 			app.currentState.searchStr = e.target.value;
+
+
 			timeoutHandler = setTimeout(() => {
 				let url = `https://api.spotify.com/v1/search?query=${app.currentState.searchStr}&offset=0&limit=20&type=${app.currentState.queryType}&market=TW`;
 				if (timeoutHandler !== null) clearTimeout(timeoutHandler);
+				if (app.currentState.searchStr.trim() === '') {
+					const render = document.getElementById('render');
+					render.innerHTML = `<h3>No Query Value </h3>`;
+					return;
+				}
 				app.ajax(url, ajaxCalling);
 			}, 1000)
 		});
 
-		document.querySelector('.query-select').addEventListener('change', (e)=> {
+		document.querySelector('.query-select').addEventListener('change', e => {
 			app.currentState.queryType = e.target.value;
 			let url = `https://api.spotify.com/v1/search?query=${app.currentState.searchStr}&offset=0&limit=20&type=${app.currentState.queryType}&market=TW`;
+			if (app.currentState.searchStr.trim() === '') {
+				const render = document.getElementById('render');
+				render.innerHTML = `<h3>No Query Value </h3>`;
+				return;
+			}
 			app.ajax(url, ajaxCalling);
-		})
+		});
+
+
+		eventLink();
 	},
 	about(cb, eventLink) {
 		cb();
 		eventLink();
 	},
 	track(cb, eventLink, ex) {
+
+		if (ex && ex.length > 1) {
+			app.setView('404');
+			return;
+		}
+
 		let id = '';
-		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
+		(typeof ex !== 'undefined') ? id = ex[0] : id = history.state.id || '';
+
 		app.currentState.id = id;
 
 		let url = `https://api.spotify.com/v1/tracks/${id}`;
-		app.ajax(url, function(e) {
-			if(e.error) {
+		app.ajax(url, function (e) {
+			if (e.error) {
 				app.render.checkAjaxError(e.error.message);
 				app.currentState.errorMsg = e.error.message;
 				return false;
-			};
+			}
+			;
 
 			app.currentState.track = e;
 			cb(e, eventLink);
@@ -535,8 +622,14 @@ app.event = {
 
 	},
 	artist(cb, eventLink, ex)  {
+
+		if (ex && ex.length > 1) {
+			app.setView('404');
+			return;
+		}
+
 		let id = '';
-		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
+		(typeof ex !== 'undefined') ? id = ex[0] : id = history.state.id || '';
 
 		let artistUrl = `https://api.spotify.com/v1/artists/${id}`;
 		let albumsUrl = `https://api.spotify.com/v1/artists/${id}/albums`;
@@ -544,18 +637,19 @@ app.event = {
 
 
 		app.currentState.id = id;
-		app.ajax(artistUrl, function(artist) {
+		app.ajax(artistUrl, function (artist) {
 
 			//errorCheck
-			if(artist.error) {
+			if (artist.error) {
 				app.render.checkAjaxError(artist.error.message);
 				app.currentState.errorMsg = artist.error.message;
 				return false;
-			};
+			}
+			;
 
 			app.currentState.artist = artist;
 
-			app.ajax(albumsUrl, function(albums) {
+			app.ajax(albumsUrl, function (albums) {
 				//fuck you callback hell
 				data = albums.items;
 				app.currentState.albums = albums.items;
@@ -566,7 +660,7 @@ app.event = {
 		});
 
 
-		let markupFn = function(i) {
+		let markupFn = function (i) {
 			return `<div class="col-md-3 well">
 								<div class="album">
 									<img class="album-thumb img-thumbnail" src="${i.images[0].url}" alt="">
@@ -577,7 +671,7 @@ app.event = {
 		}
 		let markupModel = '';
 
-		renderContainer.addEventListener('keyup', function(e) {
+		renderContainer.addEventListener('keyup', function (e) {
 			if (e.target && e.target.matches("#inputDefault")) {
 				let value = e.target.value.trim();
 				//clear items
@@ -587,13 +681,13 @@ app.event = {
 
 				//filtering
 				if (value !== '') {
-					data.forEach(function(item) {
-						if(item.name.indexOf(value) > -1) {
+					data.forEach(function (item) {
+						if (item.name.indexOf(value) > -1) {
 							markupModel += markupFn(item);
 						}
 					});
 				} else {
-					data.forEach(function(item) {
+					data.forEach(function (item) {
 						markupModel += markupFn(item);
 					})
 				}
@@ -609,43 +703,56 @@ app.event = {
 
 	},
 	album(cb, eventLink, ex) {
+
+		if (ex && ex.length > 1) {
+			app.setView('404');
+			return;
+		}
+
 		let id = '';
-		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
+		(typeof ex !== 'undefined') ? id = ex[0] : id = history.state.id || '';
 
 		let albumsUrl = `https://api.spotify.com/v1/albums/${id}`;
 
-		app.ajax(albumsUrl, function(album) {
-				//fuck you callback hell
+		app.ajax(albumsUrl, function (album) {
+			//fuck you callback hell
 
-				//errorCheck
-				if(album.error) {
-					app.render.checkAjaxError(album.error.message);
-					return false;
-				};
-				cb(album, eventLink);
+			//errorCheck
+			if (album.error) {
+				app.render.checkAjaxError(album.error.message);
+				return false;
+			}
+			;
+			cb(album, eventLink);
 
 		});
 	},
 	'top-tracks'(cb, eventLink, ex) {
+
+		if (ex && ex.length > 1) {
+			app.setView('404');
+			return;
+		}
+
 		let id = '';
-		(typeof ex !== 'undefined') ?  id = ex : 	id = history.state.id || '';
+		(typeof ex !== 'undefined') ? id = ex[0] : id = history.state.id || '';
 
 		app.currentState.id = id;
 
 		let artistUrl = `https://api.spotify.com/v1/artists/${id}`;
 		let trackUrl = `https://api.spotify.com/v1/artists/${id}/top-tracks?country=TW`;
 
-		app.ajax(artistUrl, function(artist) {
+		app.ajax(artistUrl, function (artist) {
 			//errorCheck
-			if(artist.error) {
+			if (artist.error) {
 				app.render.checkAjaxError(artist.error.message);
 				app.currentState.errorMsg = artist.error.message;
 				return false;
-			};
+			}
 
 			app.currentState.artist = artist;
 
-			app.ajax(trackUrl, function(tracks) {
+			app.ajax(trackUrl, function (tracks) {
 				//fuck you callback hell
 
 				app.currentState.tracks = tracks;
@@ -656,11 +763,10 @@ app.event = {
 
 
 	},
-
 };
 
 app.render = {
-	search: function (obj) {
+	search(obj) {
 		const genresMarkup = function (o) {
 			if (o.genres) {
 				let markup = `<div><strong>Genres: </strong>`;
@@ -720,7 +826,7 @@ app.render = {
 		renderContainer.innerHTML = markup;
 
 	},
-}
+};
 
 // view STORE
 app.state = {
@@ -759,7 +865,6 @@ app.state = {
 	}
 };
 
-
 app.init();
 
 //event handler
@@ -768,51 +873,67 @@ function deepLinkBinder(e) {
 	let href = e.target.attributes.href.textContent;
 	//push state and route
 	const params = href.split('/');
-	console.log(params);
-
-	//event emmiter??
+	let ids = params.slice(2);
+	let urlReturner = () => {
+		let urlConcatenation = '';
+		ids.forEach(e=>	urlConcatenation += ('/' + e));
+		return '/' + params[1] + urlConcatenation;
+	};
 
 	app.pushHistory({
 		state: params[1],
-		id: params[2]
-	}, params[1], ('/'+ params[1] + '/' + params[2]));
+		id: params.slice(2)
+	}, params[1], urlReturner());
 }
 
-// //active binder
-// [...document.querySelectorAll('.nav a')].forEach(t => {
-// 	t.addEventListener('click', e => {
-// 	})
-// });
-
 [...document.querySelectorAll('.router-link')].forEach(i => {
-	i.addEventListener('click', function (e) {
+	i.addEventListener('click', e => {
 		e.preventDefault();
 		let id = e.target.dataset.href;
 		// if innerstate is same as prev return
-		if (id === history.state.state) return false;
+		if (history.state && id === history.state.state) return false;
 
-
-		app.setActiveLink(e.target);
+		app.event.setActiveLink(e.target);
+		let url = app.routeFn.getRouteUrl(id) || '';
 
 		app.pushHistory({
 			state: id
-		}, id, ('/' + id));
+		}, id, ('/' + url));
 	});
 });
 
-
 //history state
-window.onpopstate = function (e) {
+window.onpopstate = e => {
 	let currentState = e.state;
-	app.setView(currentState.state);
-	if (currentState.state === '') {
-		app.setActiveLink(document.querySelector('.nav a[data-href=""]'))
-	} else if (currentState.state === 'about') {
-		app.setActiveLink(document.querySelector('.nav a[data-href="about"]'))
+
+	if (currentState === null) { // if 1st time without any history
+		let root = app.route();
+		if (root.length >= 3) {
+			//deep link
+			currentState = {
+				state: root[1],
+				id: root.slice(2)
+			};
+			app.setView(currentState.state, currentState.id);
+
+		} else {
+			currentState = {
+				state: app.routeFn.checkHome(root[1])
+			};
+			app.setView(currentState.state);
+
+		}
+
 	} else {
-		[...document.querySelectorAll('.nav a')].forEach(e => {
-			e.classList.remove('active');
+		app.setView(currentState.state);
+	}
+
+	if (!app.routeFn.checkDeepLink(currentState.state)) {
+		app.event.setActiveLink(document.querySelector('.nav a[data-href="' + currentState.state + '"]'))
+	} else {
+		[...document.querySelectorAll('.nav a')].forEach(f => {
+			f.classList.remove('active');
 		});
 	}
-}
+};
 
