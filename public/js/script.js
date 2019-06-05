@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+/* eslint-disable no-undef */
 const renderContainer = document.querySelector('.content');
 
 const app = {};
@@ -150,8 +152,11 @@ app.view = {
 				<form>
 					<div class="form-group">
 						<input type="text" class="form-control" placeholder="Search Music..." id="searchStr" name="searchStr">
-					</div>
-					<select class="query-select">${optionsMarkup}</select>
+          </div>
+          <div class="form-group">
+            <label for="type">Select Type: </label>
+            <select id="type" class="query-select form-control">${optionsMarkup}</select>
+          </div>
 				</form>
 				<div id="render"></div>
 			</div>`;
@@ -209,7 +214,16 @@ app.view = {
 							
 							<h2>${data.name}</h2>
 							<h5>Album Name: <a class="deep-link" href="/album/${data.album.id}">${data.album.name}</a></h5>
-							<a href="${data.external_urls.spotify}" target="_blank" class="btn btn-primary">View In Spotify</a>
+              <a href="${data.external_urls.spotify}" target="_blank" class="btn btn-primary">View In Spotify</a>
+              <figure>
+                <figcaption>Listen to the ${data.name}:</figcaption>
+                <audio
+                    controls
+                    src="${data.preview_url}">
+                        Your browser does not support the
+                        <code>audio</code> element.
+                </audio>
+              </figure>
 						</div>
 					</div>
 				</header>
@@ -321,7 +335,7 @@ app.view = {
 		const forArtist = function (artists) {
 			let markup = '';
 			artists.forEach(artist => {
-				markup += `<span class="spacer"><a href="/artist/${artist.id}" class="deep-link">${artist.name}</a></span>`;
+				markup += `<span class="spacer"><a href="/artist/${artist.id}" class="deep-link btn btn-link">${artist.name}</a></span>`;
 			});
 
 			return markup;
@@ -330,14 +344,23 @@ app.view = {
 		const tracksMarkup = function (i) {
 			let markup = '';
 			i.forEach(track => {
-				markup += `<div class="well">
-						<h5>${track.track_number} - <a href="/track/${track.id}" class="deep-link">${track.name}</a></h5>
-						<div>Artist: 
-							${forArtist(track.artists)}
-						</div>
-						<a href="${track.preview_url}" target="_blank">Preview Track</a>
-
-					</div>`;
+				markup += `<div class="card text-white bg-secondary mb-3">
+            <h5 class="card-header">
+              ${track.track_number} - <a href="/track/${track.id}" class="deep-link">${track.name}</a>
+              ${forArtist(track.artists)}
+            </h5>
+            <div class="card-body">
+              <figure class="flex">
+                <figcaption>Listen to the ${track.name}:</figcaption>
+                <audio
+                    controls
+                    src="${track.preview_url}">
+                        Your browser does not support the
+                        <code>audio</code> element.
+                </audio>
+              </figure>
+            </div> 
+          </div>`;
 			});
 
 			return markup;
@@ -482,18 +505,27 @@ app.setView = function (state, existence) {
 };
 
 app.pushHistory = function (state, page, url) {
-	// console.log(state, page, url);
-	history.pushState(state, '', url);
 
-	this.paramObj = state;
+  history.pushState(state, '', url);
+
+  // if (state.component === history.state.component && !location.search) return; //TODO
+
+  
+  this.paramObj = state;
+
+  if (location.search) return;
 
 	//do navigation and set content
-	this.setView(history.state.state);
+	this.setView(history.state.component);
 
 };
 
 app.ajax = ((url, cb) => {
-	fetch(url)
+	fetch(url, {
+    headers: {
+      'Authorization' :  'Bearer ' + window.accessToken
+    }
+  })
 		.then(res => res.json())
 		.then(j => cb(j))
 });
@@ -528,8 +560,6 @@ app.event = {
 		cb();
 
 		const ajaxCalling = r => {
-
-
 			//emit event
 			let renderMarkup = '';
 			const render = document.getElementById('render');
@@ -554,42 +584,54 @@ app.event = {
 
 			} catch (err) {
 				console.log(err);
-				render.innerHTML = ''
+				render.innerHTML = '';
 			}
 
 
-		}
+    };
+    
+    const ajaxHandler = () => {
+      let url = `https://api.spotify.com/v1/search?query=${app.currentState.searchStr}&offset=0&limit=20&type=${app.currentState.queryType}&market=TW`;
+      if (timeoutHandler !== null) clearTimeout(timeoutHandler);
+      if (app.currentState.searchStr.trim() === '') {
+        const render = document.getElementById('render');
+        render.innerHTML = `<h3>No Query Value </h3>`;
+        return;
+      }
+      app.ajax(url, ajaxCalling);
+    };
+
+    
+    if (location.search) {
+      const searchParams = new URLSearchParams(location.search);
+      const searchValue = searchParams.get('search');
+      document.getElementById('searchStr').value = searchValue;
+      app.currentState.searchStr = searchValue;
+      ajaxHandler();
+    }
 
 		//event
 		document.querySelector('#searchStr').addEventListener('keyup', e => {
-			app.currentState.searchStr = e.target.value;
-
-
+      app.currentState.searchStr = e.target.value;
 			timeoutHandler = setTimeout(() => {
-				let url = `https://api.spotify.com/v1/search?query=${app.currentState.searchStr}&offset=0&limit=20&type=${app.currentState.queryType}&market=TW`;
-				if (timeoutHandler !== null) clearTimeout(timeoutHandler);
-				if (app.currentState.searchStr.trim() === '') {
-					const render = document.getElementById('render');
-					render.innerHTML = `<h3>No Query Value </h3>`;
-					return;
-				}
-				app.ajax(url, ajaxCalling);
-			}, 1000)
+        app.pushHistory({
+          component: 'search'
+        }, 'Search', (`/?search=${app.currentState.searchStr}`));
+        ajaxHandler();
+			}, 1000);
 		});
 
 		document.querySelector('.query-select').addEventListener('change', e => {
-			app.currentState.queryType = e.target.value;
-			let url = `https://api.spotify.com/v1/search?query=${app.currentState.searchStr}&offset=0&limit=20&type=${app.currentState.queryType}&market=TW`;
-			if (app.currentState.searchStr.trim() === '') {
-				const render = document.getElementById('render');
-				render.innerHTML = `<h3>No Query Value </h3>`;
-				return;
-			}
-			app.ajax(url, ajaxCalling);
+      app.currentState.queryType = e.target.value;
+      app.pushHistory({
+        component: 'search'
+      }, 'Search', (`/?search=${app.currentState.searchStr}`));
+			ajaxHandler();
 		});
 
 
-		eventLink();
+    eventLink();
+  
 	},
 	about(cb, eventLink) {
 		cb();
@@ -803,14 +845,17 @@ app.render = {
 
 		let markup = `<div class="row">
 					<div class="col-md-12">
-						<div class="search-res well">
-							<h4>
+						<div class="search-res card">
+							<h4 class="card-header">
 								<a class="deep-link" href="/${app.currentState.queryType}/${obj.id}">${obj.name}</a>
-							</h4>
+              </h4>
+              
+              <div class="card-body">
 							
-							${genresMarkup(obj)}
-							${artistsMarkup(obj)}
-							${albumMarkup(obj)}
+                ${genresMarkup(obj)}
+                ${artistsMarkup(obj)}
+                ${albumMarkup(obj)}
+              </div>  
 
 						</div>
 					</div>
@@ -881,7 +926,7 @@ function deepLinkBinder(e) {
 	};
 
 	app.pushHistory({
-		state: params[1],
+		component: params[1],
 		id: params.slice(2)
 	}, params[1], urlReturner());
 }
@@ -897,39 +942,39 @@ function deepLinkBinder(e) {
 		let url = app.routeFn.getRouteUrl(id) || '';
 
 		app.pushHistory({
-			state: id
+			component: id
 		}, id, ('/' + url));
 	});
 });
 
 //history state
 window.onpopstate = e => {
-	let currentState = e.state;
+  let currentState = e.state;
 
 	if (currentState === null) { // if 1st time without any history
 		let root = app.route();
 		if (root.length >= 3) {
 			//deep link
 			currentState = {
-				state: root[1],
+				component: root[1],
 				id: root.slice(2)
-			};
-			app.setView(currentState.state, currentState.id);
+      };
+			app.setView(currentState.component, currentState.id);
 
 		} else {
 			currentState = {
-				state: app.routeFn.checkHome(root[1])
+				component: app.routeFn.checkHome(root[1])
 			};
-			app.setView(currentState.state);
-
+			app.setView(currentState.component);
 		}
 
 	} else {
-		app.setView(currentState.state);
+    app.setView(currentState.component);
+
 	}
 
-	if (!app.routeFn.checkDeepLink(currentState.state)) {
-		app.event.setActiveLink(document.querySelector('.nav a[data-href="' + currentState.state + '"]'))
+	if (!app.routeFn.checkDeepLink(currentState.component)) {
+		app.event.setActiveLink(document.querySelector('.nav a[data-href="' + currentState.component + '"]'))
 	} else {
 		[...document.querySelectorAll('.nav a')].forEach(f => {
 			f.classList.remove('active');
